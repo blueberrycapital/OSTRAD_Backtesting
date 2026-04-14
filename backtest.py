@@ -1,10 +1,4 @@
-'''
-# Author: Balaji Betadur / Enhanced Backtester
-# Email: balajibetadur@gmail.com
-# Created Date: Monday, April 13th 2026
 
-# Copyright (c) 2026 Blueberry Capital
-'''
 
 import numpy as np
 import pandas as pd
