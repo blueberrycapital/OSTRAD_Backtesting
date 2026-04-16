@@ -1,6 +1,5 @@
 
 
-import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union, Callable, Tuple
@@ -112,19 +111,21 @@ class FileDataLoader(DataLoader):
     
     def __init__(self, file_path: str, file_format: str = 'csv',
                  spot_file_path: Optional[str] = None,
+                 date_column: str = 'date',
                  spot_column_map: Optional[Dict] = None,
                  option_column_map: Optional[Dict] = None):
         self.file_path = file_path
         self.spot_file_path = spot_file_path
         self.file_format = file_format
+        self.date_column = date_column
         self.spot_column_map = spot_column_map or {
-            'date': 'date', 'open': 'open', 'high': 'high', 
+            'date': 'date', 'open': 'open', 'high': 'high',
             'low': 'low', 'close': 'close', 'volume': 'volume'
         }
         self.option_column_map = option_column_map or {
             'date': 'date', 'symbol': 'symbol', 'strike': 'strike',
             'option_type': 'option_type', 'expiry': 'expiry',
-            'open': 'open', 'high': 'high', 'low': 'low', 
+            'open': 'open', 'high': 'high', 'low': 'low',
             'close': 'close', 'volume': 'volume'
         }
     
@@ -146,33 +147,39 @@ class FileDataLoader(DataLoader):
         
         # Load options data
         options_df = self._read_file(self.file_path)
+        options_df = self._standardize_options(options_df)
         if 'symbol' in options_df.columns:
             options_df = options_df[options_df['symbol'] == symbol]
-        options_df = self._standardize_options(options_df)
-        options_df = options_df[(options_df.index >= start_date) & 
-                               (options_df.index <= end_date)]
+        options_df = options_df[(options_df.index >= start_date) &
+                                (options_df.index <= end_date)]
         
         return {'spot': spot_df, 'options': options_df}
     
     def _read_file(self, path: str) -> pd.DataFrame:
         """Read CSV or Parquet"""
         if self.file_format == 'csv':
-            return pd.read_csv(path, parse_dates=['date'])
+            return pd.read_csv(path, parse_dates=[self.date_column])
         elif self.file_format == 'parquet':
             return pd.read_parquet(path)
         else:
             raise ValueError(f"Unsupported format: {self.file_format}")
-    
+
     def _standardize_spot(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standardize spot column names"""
         df = df.rename(columns=self.spot_column_map)
-        df.set_index('date', inplace=True)
+        df.set_index(self.date_column, inplace=True)
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
         return df[['open', 'high', 'low', 'close', 'volume']]
-    
+
     def _standardize_options(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standardize options column names"""
         df = df.rename(columns=self.option_column_map)
-        df.set_index('date', inplace=True)
+        df.set_index(self.date_column, inplace=True)
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        if 'expiry' in df.columns:
+            df['expiry'] = pd.to_datetime(df['expiry'])
         return df
 
 
@@ -199,53 +206,90 @@ class DataFrameLoader(DataLoader):
 
 
 class InfluxDBLoader(DataLoader):
-    """Query data from InfluxDB"""
-    
+    """Query data from InfluxDB (zerodha-pipeline schema)
+
+    Measurements:
+      - Spot  : fut_spot_merged  (tag data_type="SPOT", tag index=<symbol>)
+      - Options: options_1min    (tag index=<symbol>, tags option_type/strike/expiry)
+    Fields: open, high, low, close, volume, oi  (all float)
+    """
+
     def __init__(self, url: str, token: str, org: str, bucket: str,
-                 spot_measurement: str = "spot_data",
-                 option_measurement: str = "option_data"):
-        self.client = influxdb_client.InfluxDBClient(
-            url=url, token=token, org=org
-        )
+                 spot_measurement: str = "fut_spot_merged",
+                 option_measurement: str = "options_1min"):
+        self.client = influxdb_client.InfluxDBClient(url=url, token=token, org=org)
         self.bucket = bucket
         self.spot_measurement = spot_measurement
         self.option_measurement = option_measurement
         self.query_api = self.client.query_api()
-    
-    def load_data(self, symbol: str, start_date: datetime, 
+
+    def load_data(self, symbol: str, start_date: datetime,
                   end_date: datetime) -> Dict[str, pd.DataFrame]:
         """Query InfluxDB for spot and options data"""
-        
-        start_str = start_date.isoformat()
-        stop_str = end_date.isoformat()
-        
-        # Query spot data
+
+        # InfluxDB range is RFC3339 UTC; include the full end day
+        start_str = start_date.strftime("%Y-%m-%dT00:00:00Z")
+        stop_str  = (end_date + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+
+        # ── Spot ──────────────────────────────────────────────────
         spot_query = f'''
-        from(bucket: "{self.bucket}")
-            |> range(start: {start_str}, stop: {stop_str})
-            |> filter(fn: (r) => r._measurement == "{self.spot_measurement}")
-            |> filter(fn: (r) => r.symbol == "{symbol}")
-            |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        '''
-        spot_df = self.query_api.query_data_frame(spot_query)
-        spot_df.set_index('_time', inplace=True)
-        spot_df = spot_df.rename(columns={
-            'open': 'open', 'high': 'high', 'low': 'low', 
-            'close': 'close', 'volume': 'volume'
-        })
-        
-        # Query options data
+from(bucket: "{self.bucket}")
+    |> range(start: {start_str}, stop: {stop_str})
+    |> filter(fn: (r) => r._measurement == "{self.spot_measurement}")
+    |> filter(fn: (r) => r.data_type == "SPOT")
+    |> filter(fn: (r) => r.index == "{symbol}")
+    |> filter(fn: (r) => r._field == "open" or r._field == "high" or
+                         r._field == "low"  or r._field == "close" or
+                         r._field == "volume")
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+'''
+        spot_df = self._query_to_df(spot_query)
+        if not spot_df.empty:
+            spot_df = self._set_time_index(spot_df)
+            for col in ["open", "high", "low", "close", "volume"]:
+                if col not in spot_df.columns:
+                    spot_df[col] = 0.0
+            spot_df = spot_df[["open", "high", "low", "close", "volume"]]
+
+        # ── Options ───────────────────────────────────────────────
         option_query = f'''
-        from(bucket: "{self.bucket}")
-            |> range(start: {start_str}, stop: {stop_str})
-            |> filter(fn: (r) => r._measurement == "{self.option_measurement}")
-            |> filter(fn: (r) => r.symbol == "{symbol}")
-            |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        '''
-        options_df = self.query_api.query_data_frame(option_query)
-        options_df.set_index('_time', inplace=True)
-        
-        return {'spot': spot_df, 'options': options_df}
+from(bucket: "{self.bucket}")
+    |> range(start: {start_str}, stop: {stop_str})
+    |> filter(fn: (r) => r._measurement == "{self.option_measurement}")
+    |> filter(fn: (r) => r.index == "{symbol}")
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+'''
+        options_df = self._query_to_df(option_query)
+        if not options_df.empty:
+            options_df = self._set_time_index(options_df)
+            options_df = options_df.rename(columns={
+                "trading_symbol": "symbol",
+                "oi":             "open_interest",
+            })
+            if "strike" in options_df.columns:
+                options_df["strike"] = pd.to_numeric(options_df["strike"], errors="coerce")
+            # Pipeline writes both "expiry" and "expiry_date" tags; prefer "expiry"
+            if "expiry" not in options_df.columns and "expiry_date" in options_df.columns:
+                options_df = options_df.rename(columns={"expiry_date": "expiry"})
+            if "expiry" in options_df.columns:
+                options_df["expiry"] = pd.to_datetime(options_df["expiry"])
+
+        return {"spot": spot_df, "options": options_df}
+
+    def _query_to_df(self, query: str) -> pd.DataFrame:
+        """Run a Flux query and always return a single DataFrame"""
+        result = self.query_api.query_data_frame(query)
+        if isinstance(result, list):
+            return pd.concat(result, ignore_index=True) if result else pd.DataFrame()
+        return result if result is not None else pd.DataFrame()
+
+    @staticmethod
+    def _set_time_index(df: pd.DataFrame) -> pd.DataFrame:
+        """Move _time to the index, stripped of timezone info"""
+        df = df.rename(columns={"_time": "date_time"})
+        df["date_time"] = pd.to_datetime(df["date_time"]).dt.tz_localize(None)
+        df.set_index("date_time", inplace=True)
+        return df
 
 
 class VWAPCalculator:
@@ -405,8 +449,10 @@ class OSTRADBacktester:
                 merged['volume'] = merged[['ce_volume', 'pe_volume']].min(axis=1)
                 
                 # Calculate VWAP indicator
+                vwap_input = merged[['close', 'volume']].reset_index()
+                vwap_input.rename(columns={vwap_input.columns[0]: 'date'}, inplace=True)
                 straddle_vwap = VWAPCalculator.calculate(
-                    merged[['close', 'volume']].reset_index(),
+                    vwap_input,
                     buy_threshold=self.params.threshold_percentage,
                     sell_threshold=self.params.threshold_percentage
                 )
@@ -846,21 +892,24 @@ class OSTRADBacktester:
                 current_date += timedelta(days=1)
                 continue
             
-            day_start = datetime.combine(current_date.date(), 
+            day_start = datetime.combine(current_date.date(),
                                       datetime.strptime(self.params.start_time, "%H:%M:%S").time())
-            day_end = datetime.combine(current_date.date(), 
+            day_end = datetime.combine(current_date.date(),
                                       datetime.strptime(self.params.end_time, "%H:%M:%S").time())
-            
-            # Generate 5-minute intervals
-            timestamps = pd.date_range(start=day_start, end=day_end, 
-                                    freq=f'{self.params.time_frame}min')
-            
+
+            # Use actual spot data timestamps for this day
+            timestamps = self.spot_data[symbol][
+                (self.spot_data[symbol].index >= day_start) &
+                (self.spot_data[symbol].index <= day_end)
+            ].index
+
+            if len(timestamps) == 0:
+                current_date += timedelta(days=1)
+                continue
+
             day_pnl = 0.0
-            
+
             for timestamp in timestamps:
-                # Skip if no data available
-                if timestamp not in self.spot_data[symbol].index:
-                    continue
                 
                 # 1. Check and take hedge positions if needed
                 hedges = self.take_hedge(symbol, timestamp)
@@ -990,71 +1039,81 @@ class OSTRADBacktester:
         return stats
 
 
-# Example usage and demonstration
 if __name__ == "__main__":
-    # Example 1: Using DataFrames directly
+    import argparse
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    parser = argparse.ArgumentParser(description="OSTRAD Backtester")
+    parser.add_argument("--start",  required=True, metavar="YYYY-MM-DD", help="Backtest start date")
+    parser.add_argument("--end",    required=True, metavar="YYYY-MM-DD", help="Backtest end date")
+    parser.add_argument("--source", default="influx", choices=["csv", "influx"], help="Data source (default: influx)")
+
+    # CSV arguments
+    parser.add_argument("--spot",    metavar="PATH", help="Spot CSV file path (csv source)")
+    parser.add_argument("--options", metavar="PATH", help="Options CSV file path (csv source)")
+
+    # InfluxDB arguments — fall back to .env values
+    parser.add_argument("--url",      default=os.getenv("INFLUX_URL"),    metavar="URL",    help="InfluxDB URL")
+    parser.add_argument("--token",    default=os.getenv("INFLUX_TOKEN"),  metavar="TOKEN",  help="InfluxDB token")
+    parser.add_argument("--org",      default=os.getenv("INFLUX_ORG"),    metavar="ORG",    help="InfluxDB org")
+    parser.add_argument("--bucket",   default=os.getenv("INFLUX_BUCKET"), metavar="BUCKET", help="InfluxDB bucket")
+    parser.add_argument("--spot-meas",   default="fut_spot_merged", metavar="NAME", help="Spot measurement name (default: fut_spot_merged)")
+    parser.add_argument("--opt-meas",    default="options_1min",    metavar="NAME", help="Option measurement name (default: options_1min)")
+
+    args = parser.parse_args()
+
+    # --- Validate dates ---
+    try:
+        start_date = datetime.strptime(args.start, "%Y-%m-%d")
+    except ValueError:
+        parser.error(f"Invalid --start date '{args.start}'. Use YYYY-MM-DD.")
+
+    try:
+        end_date = datetime.strptime(args.end, "%Y-%m-%d")
+    except ValueError:
+        parser.error(f"Invalid --end date '{args.end}'. Use YYYY-MM-DD.")
+
+    if end_date < start_date:
+        parser.error("--end date must be on or after --start date.")
+
+    # --- Build loader ---
+    if args.source == "csv":
+        if not args.spot or not args.options:
+            parser.error("--spot and --options are required when --source=csv")
+        loader = FileDataLoader(
+            file_path=args.options,
+            spot_file_path=args.spot,
+            file_format='csv',
+            date_column='date_time',
+            spot_column_map={
+                'open': 'open', 'high': 'high',
+                'low': 'low', 'close': 'close', 'volume': 'volume'
+            },
+            option_column_map={
+                'trading_symbol': 'symbol',
+                'expiry_date': 'expiry',
+                'strike': 'strike',
+                'option_type': 'option_type',
+                'open': 'open', 'high': 'high',
+                'low': 'low', 'close': 'close', 'volume': 'volume'
+            }
+        )
+    else:  # influx
+        if not all([args.url, args.token, args.org, args.bucket]):
+            parser.error("--url, --token, --org, and --bucket are required when --source=influx")
+        loader = InfluxDBLoader(
+            url=args.url, token=args.token, org=args.org, bucket=args.bucket,
+            spot_measurement=args.spot_meas,
+            option_measurement=args.opt_meas
+        )
+
     print("=" * 60)
-    print("OSTRAD BACKTESTER - USAGE EXAMPLES")
+    print("OSTRAD BACKTESTER")
     print("=" * 60)
-    
-    # Create sample data (in real usage, load your actual data)
-    dates = pd.date_range(start='2024-01-01', end='2024-01-05', freq='5min')
-    dates = dates[dates.weekday < 5]  # Weekdays only
-    dates = dates[(dates.hour >= 9) & (dates.hour <= 15)]
-    
-    # Sample spot data
-    np.random.seed(42)
-    spot_df = pd.DataFrame({
-        'open': 21700 + np.random.randn(len(dates)).cumsum() * 10,
-        'high': 21700 + np.random.randn(len(dates)).cumsum() * 10 + 20,
-        'low': 21700 + np.random.randn(len(dates)).cumsum() * 10 - 20,
-        'close': 21700 + np.random.randn(len(dates)).cumsum() * 10,
-        'volume': np.random.randint(100000, 500000, len(dates))
-    }, index=dates)
-    spot_df['high'] = spot_df[['open', 'close']].max(axis=1) + 10
-    spot_df['low'] = spot_df[['open', 'close']].min(axis=1) - 10
-    
-    # Sample options data
-    strikes = [21600, 21650, 21700, 21750, 21800]
-    expiry = datetime(2024, 1, 25)
-    
-    option_records = []
-    for date in dates:
-        spot = spot_df.loc[date, 'close']
-        atm = min(strikes, key=lambda x: abs(x - spot))
-        
-        for strike in strikes:
-            distance = abs(strike - spot)
-            base_premium = max(50, 200 - distance * 2)
-            
-            for opt_type in ['CE', 'PE']:
-                if opt_type == 'CE':
-                    intrinsic = max(0, spot - strike)
-                else:
-                    intrinsic = max(0, strike - spot)
-                
-                premium = intrinsic + base_premium + np.random.randn() * 5
-                
-                option_records.append({
-                    'date': date,
-                    'symbol': 'NIFTY',
-                    'strike': strike,
-                    'option_type': opt_type,
-                    'expiry': expiry,
-                    'open': premium + np.random.randn() * 2,
-                    'high': premium + abs(np.random.randn() * 5),
-                    'low': premium - abs(np.random.randn() * 5),
-                    'close': premium,
-                    'volume': np.random.randint(5000, 50000)
-                })
-    
-    options_df = pd.DataFrame(option_records)
-    options_df.set_index('date', inplace=True)
-    
-    # Initialize with DataFrame loader
-    loader = DataFrameLoader(spot_df, options_df)
-    
-    # Configure strategy
+
+    # --- Configure and run ---
     params = StrategyParams(
         symbols=['NIFTY'],
         capital_per_symbol=10_000_000,
@@ -1065,88 +1124,22 @@ if __name__ == "__main__":
             elm_percent=3.0
         )
     )
-    
-    # Run backtest
+
     backtester = OSTRADBacktester(params, loader)
-    results = backtester.run_backtest(
-        start_date=datetime(2024, 1, 1),
-        end_date=datetime(2024, 1, 5)
-    )
-    
+    results = backtester.run_backtest(start_date=start_date, end_date=end_date)
+
     print("\n" + "=" * 60)
     print("BACKTEST RESULTS")
     print("=" * 60)
-    print(f"\nTotal Trades: {results['statistics']['total_trades']}")
-    print(f"Total P&L: ₹{results['statistics']['total_pnl']:,.2f}")
-    print(f"Win Rate: {results['statistics']['winning_trades'] / max(results['statistics']['total_trades'], 1) * 100:.1f}%")
-    print(f"Profit Factor: {results['statistics']['profit_factor']:.2f}")
-    print(f"SL Hit Rate: {results['statistics']['sl_hit_rate']:.1f}%")
-    print(f"Max Profit: ₹{results['statistics']['max_profit']:,.2f}")
-    print(f"Max Loss: ₹{results['statistics']['max_loss']:,.2f}")
-    
-    # Example 2: File-based loading
-    print("\n" + "=" * 60)
-    print("FILE-BASED LOADING EXAMPLE")
-    print("=" * 60)
-    print("""
-    # Single file with both spot and options
-    loader = FileDataLoader(
-        file_path='data/nifty_options.csv',
-        file_format='csv',
-        spot_column_map={'date': 'timestamp', 'close': 'spot_close'},
-        option_column_map={'date': 'timestamp', 'strike': 'strike_price'}
-    )
-    
-    # Separate files
-    loader = FileDataLoader(
-        file_path='data/options.csv',
-        spot_file_path='data/spot.csv',
-        file_format='csv'
-    )
-    """)
-    
-    # Example 3: InfluxDB loading
-    print("\n" + "=" * 60)
-    print("INFLUXDB LOADING EXAMPLE")
-    print("=" * 60)
-    print("""
-    loader = InfluxDBLoader(
-        url="http://localhost:8086",
-        token="your-token",
-        org="your-org",
-        bucket="market_data",
-        spot_measurement="spot_ticks",
-        option_measurement="option_ticks"
-    )
-    """)
-    
-    # Example 4: Margin comparison
-    print("\n" + "=" * 60)
-    print("MARGIN CALCULATION COMPARISON")
-    print("=" * 60)
-    
-    spot = 21700
-    lot_size = 75  # NIFTY lot size
-    option_price = 150
-    quantity = -75  # Short 1 lot
-    
-    # Simple 20% method
-    simple_margin = spot * abs(quantity) * 0.20
-    print(f"\nSimple 20% Method:")
-    print(f"  Margin = {spot} × {abs(quantity)} × 20% = ₹{simple_margin:,.2f}")
-    
-    # SPAN-like method
-    margin_config = MarginConfig()
-    span_margin = margin_config.calculate_span_margin(
-        spot_price=spot,
-        lot_size=lot_size,
-        option_price=option_price,
-        quantity=quantity,
-        is_short=True
-    )
-    print(f"\nSPAN-like Method:")
-    print(f"  VaR (12%) = {spot} × {lot_size} × 12% = ₹{spot * lot_size * 0.12:,.2f}")
-    print(f"  ELM (3%) = {spot} × {lot_size} × 3% = ₹{spot * lot_size * 0.03:,.2f}")
-    print(f"  Premium Received = {option_price} × {abs(quantity)} = ₹{option_price * abs(quantity):,.2f}")
-    print(f"  Net Margin = (VaR + ELM) - Premium = ₹{span_margin:,.2f}")
-    print(f"\n  Savings vs Simple Method: ₹{simple_margin - span_margin:,.2f} ({(1 - span_margin/simple_margin)*100:.1f}%)")
+    stats = results['statistics']
+    if not stats:
+        print("\nNo trades were generated. Check data loading and strategy parameters.")
+        print(f"Total trade events recorded: {len(results['trades'])}")
+    else:
+        print(f"\nTotal Trades:  {stats['total_trades']}")
+        print(f"Total P&L:     ₹{stats['total_pnl']:,.2f}")
+        print(f"Win Rate:      {stats['winning_trades'] / max(stats['total_trades'], 1) * 100:.1f}%")
+        print(f"Profit Factor: {stats['profit_factor']:.2f}")
+        print(f"SL Hit Rate:   {stats['sl_hit_rate']:.1f}%")
+        print(f"Max Profit:    ₹{stats['max_profit']:,.2f}")
+        print(f"Max Loss:      ₹{stats['max_loss']:,.2f}")

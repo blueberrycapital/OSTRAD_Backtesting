@@ -1,0 +1,6 @@
+pandas
+influxdb-client
+kiteconnect
+onetimepass
+requests
+python-dotenv
