@@ -1,0 +1,47 @@
+2026-04-16 19:17:44,091 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-16 19:17:44,101 | INFO | ============================================================
+2026-04-16 19:17:44,102 | INFO | OSTRAD BACKTEST: SENSEX
+2026-04-16 19:17:44,103 | INFO | Period: 2026-04-15 to 2026-04-15
+2026-04-16 19:17:44,104 | INFO | ============================================================
+2026-04-16 19:17:44,223 | INFO | SENSEX: 375 spot candles, 197797 option records
+2026-04-17 13:28:46,150 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 13:28:46,159 | INFO | ============================================================
+2026-04-17 13:28:46,160 | INFO | OSTRAD BACKTEST: SENSEX
+2026-04-17 13:28:46,164 | INFO | Period: 2026-04-15 to 2026-04-15
+2026-04-17 13:28:46,164 | INFO | ============================================================
+2026-04-17 13:28:46,302 | INFO | SENSEX: 375 spot candles, 197797 option records
+2026-04-17 13:30:08,519 | INFO | 2026-04-15: Trades=1, Total=2, P&L=₹37,780.00
+2026-04-17 13:30:08,581 | INFO | Daily stats saved to results/sensex_influx\SENSEX_daily_stats.csv
+2026-04-17 13:30:08,593 | INFO | Trades saved to results/sensex_influx\SENSEX_trades.csv
+2026-04-17 15:42:41,123 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 15:42:41,134 | INFO | ============================================================
+2026-04-17 15:42:41,135 | INFO | OSTRAD BACKTEST: SENSEX
+2026-04-17 15:42:41,136 | INFO | Period: 2026-04-15 to 2026-04-15
+2026-04-17 15:42:41,138 | INFO | ============================================================
+2026-04-17 15:42:41,248 | INFO | SENSEX: 375 spot candles, 197797 option records
+2026-04-17 15:44:02,242 | INFO | 2026-04-15: Trades=1, Total=2, P&L=₹37,780.00
+2026-04-17 15:44:02,256 | INFO | Daily stats saved to results/sensex_influx\SENSEX_daily_stats.csv
+2026-04-17 15:44:02,261 | INFO | Trades saved to results/sensex_influx\SENSEX_trades.csv
+2026-04-17 15:45:04,338 | ERROR | InfluxDB query error: HTTPConnectionPool(host='165.22.215.65', port=8086): Read timed out.
+2026-04-17 15:45:04,339 | INFO | Loaded 375 spot records, 0 option records from InfluxDB
+2026-04-17 15:45:44,362 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 15:48:57,200 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 15:48:57,202 | INFO | ============================================================
+2026-04-17 15:48:57,202 | INFO | OSTRAD BACKTEST: SENSEX
+2026-04-17 15:48:57,202 | INFO | Period: 2026-04-15 to 2026-04-15
+2026-04-17 15:48:57,203 | INFO | ============================================================
+2026-04-17 15:48:57,304 | INFO | SENSEX: 375 spot candles, 197797 option records
+2026-04-17 15:50:14,218 | INFO | 2026-04-15: Trades=1, Total=2, P&L=₹37,780.00
+2026-04-17 15:55:07,862 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 15:55:07,864 | INFO | ============================================================
+2026-04-17 15:55:07,864 | INFO | OSTRAD BACKTEST: SENSEX
+2026-04-17 15:55:07,865 | INFO | Period: 2026-04-15 to 2026-04-15
+2026-04-17 15:55:07,865 | INFO | ============================================================
+2026-04-17 15:55:07,979 | INFO | SENSEX: 375 spot candles, 197797 option records
+2026-04-17 15:56:29,232 | INFO | 2026-04-15: Trades=1, Total=2, P&L=₹37,780.00
+2026-04-17 15:56:29,234 | INFO | Daily stats saved to results/sensex_influx\SENSEX_daily_stats.csv
+2026-04-17 15:56:29,236 | INFO | Trades saved to results/sensex_influx\SENSEX_trades.csv
+2026-04-17 16:20:18,045 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 16:21:52,769 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-17 16:23:50,239 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB
+2026-04-22 14:47:18,519 | INFO | Loaded 375 spot records, 197797 option records from InfluxDB

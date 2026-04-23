@@ -1,0 +1,16 @@
+{
+  "total_days": 1,
+  "profitable_days": 1,
+  "losing_days": 0,
+  "total_pnl": 46020.0,
+  "avg_daily_pnl": 46020.0,
+  "max_daily_profit": 46020.0,
+  "max_daily_loss": 46020.0,
+  "total_trades": 3,
+  "avg_trades_per_day": 3.0,
+  "winning_trades": 1,
+  "losing_trades": 2,
+  "avg_trade_pnl": 15340.0,
+  "max_trade_profit": 64760.0,
+  "max_trade_loss": -17000.0
+}

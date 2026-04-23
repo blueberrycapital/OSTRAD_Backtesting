@@ -1,0 +1,3 @@
+symbol,strike,option_type,expiry,entry_time,entry_price,quantity,lots,sl_price,sl2_price,is_hedge,exit_time,exit_price,exit_reason,pnl
+SENSEX,78200,CE,2026-04-16,2026-04-15 09:20:00,305.65,-800,40,366.8,,False,2026-04-15 15:15:00,256.9,EOD_SQUAREOFF,39000.0
+SENSEX,80100,CE,2026-04-16,2026-04-15 09:25:00,10.2,400,20,,,True,2026-04-15 15:15:00,7.15,EOD_SQUAREOFF,-1219.9999999999995

@@ -1,0 +1,21 @@
+2026-04-16 18:44:32,871 | INFO | Running backtest for NIFTY on 2026-04-16
+2026-04-16 18:44:33,282 | ERROR | InfluxDB query error: (404)
+Reason: Not Found
+HTTP response headers: HTTPHeaderDict({'Content-Type': 'application/json; charset=utf-8', 'Vary': 'Accept-Encoding', 'X-Influxdb-Build': 'OSS', 'X-Influxdb-Version': 'v2.7.6', 'X-Platform-Error-Code': 'not found', 'Date': 'Thu, 16 Apr 2026 13:14:32 GMT', 'Transfer-Encoding': 'chunked'})
+HTTP response body: b'{"code":"not found","message":"failed to initialize execute state: could not find bucket \\"test_nifty_spot\\""}'
+
+2026-04-16 18:48:45,000 | INFO | Running backtest for NIFTY on 2026-04-16
+2026-04-16 18:49:07,499 | INFO | Loaded 375 spot records, 374704 option records from InfluxDB
+2026-04-16 18:49:07,500 | INFO | Spot data shape   : (375, 6)
+2026-04-16 18:49:07,500 | INFO | Options data shape: (374704, 10)
+2026-04-16 18:49:07,503 | INFO | Spot index range  : 2026-04-16 03:45:00 → 2026-04-16 09:59:00
+2026-04-16 18:49:07,506 | INFO | Options index range: 2026-04-16 03:45:00 → 2026-04-16 09:59:00
+2026-04-16 18:49:07,506 | INFO | ============================================================
+2026-04-16 18:49:07,507 | INFO | OSTRAD BACKTEST: NIFTY
+2026-04-16 18:49:07,507 | INFO | Period: 2026-04-16 to 2026-04-16
+2026-04-16 18:49:07,507 | INFO | ============================================================
+2026-04-16 18:49:07,703 | INFO | NIFTY: 375 spot candles, 374704 option records
+2026-04-16 18:53:52,436 | INFO | 2026-04-16: Trades=14, Total=14, P&L=₹-38,772.50
+2026-04-16 18:53:52,510 | INFO | Daily stats saved to results/influx_today\NIFTY_daily_stats.csv
+2026-04-16 18:53:52,518 | INFO | Trades saved to results/influx_today\NIFTY_trades.csv
+2026-04-16 18:53:52,523 | INFO | Results saved: {'daily_stats': 'results/influx_today\\NIFTY_daily_stats.csv', 'trades': 'results/influx_today\\NIFTY_trades.csv', 'log': 'results/influx_today\\NIFTY_log.csv', 'summary': 'results/influx_today\\NIFTY_summary.json'}
